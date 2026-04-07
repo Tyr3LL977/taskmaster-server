@@ -187,6 +187,22 @@ function nagRow() {
   ];
 }
 
+function dueDateRow() {
+  return [
+    {type:1, components:[
+      {type:2, style:2, label:'Today',    custom_id:'due_0'},
+      {type:2, style:2, label:'Tomorrow', custom_id:'due_1'},
+      {type:2, style:2, label:'3 days',   custom_id:'due_3'},
+      {type:2, style:2, label:'1 week',   custom_id:'due_7'},
+    ]},
+    {type:1, components:[
+      {type:2, style:2, label:'2 weeks',  custom_id:'due_14'},
+      {type:2, style:2, label:'1 month',  custom_id:'due_30'},
+      {type:2, style:1, label:'No due date', custom_id:'due_none'},
+    ]}
+  ];
+}
+
 function taskActionRow(taskId) {
   return [{
     type:1, components:[
@@ -349,18 +365,38 @@ app.post("/discord", async (req,res) => {
       return;
     }
 
-    // Nag interval selection
+    // Nag interval selection — save interval then ask for due date
     if (data.startsWith('nag_') && pendingAdd) {
       const interval = parseInt(data.replace('nag_',''));
+      pendingAdd.nagInterval = interval;
+      const nagLabel = interval===0?'No auto-nag':`Every ${interval>=60?interval/60+' hr':interval+' min'}`;
+      await editInteractionReply(pendingAdd.token, {
+        content:`➕ **Adding:** ${pendingAdd.name}\n✅ Urgency: ${URGENCY[pendingAdd.urgency||'normal'].label}\n✅ Nag: ${nagLabel}\n\n**Does this have a due date?**`,
+        components: dueDateRow()
+      });
+      return;
+    }
+
+    // Due date selection
+    if (data.startsWith('due_') && pendingAdd) {
+      const val = data.replace('due_','');
+      let due = '';
+      if (val !== 'none') {
+        const d = new Date();
+        d.setDate(d.getDate() + parseInt(val));
+        due = d.toISOString().slice(0,10);
+      }
       const t = {
         id:genId(), done:false, name:pendingAdd.name,
         urgency:pendingAdd.urgency||'normal',
-        nagInterval:interval, nagCount:0, snoozedUntil:null,
-        dueFiredDays:[], client:'', due:'', notes:'', reminder:null,
+        nagInterval:pendingAdd.nagInterval||60,
+        nagCount:0, snoozedUntil:null,
+        dueFiredDays:[], client:'', due, notes:'', reminder:null,
         created:new Date().toISOString()
       };
       tasks.push(t);
-      const nagLabel = interval===0?'No auto-nag':`Every ${interval>=60?interval/60+' hr':interval+' min'}`;
+      const nagLbl = t.nagInterval===0?'No auto-nag':`Every ${t.nagInterval>=60?t.nagInterval/60+' hr':t.nagInterval+' min'}`;
+      const dueLbl = due ? fmtDate(due) : 'No due date';
       await editInteractionReply(pendingAdd.token, {
         content:'',
         embeds:[{
@@ -368,14 +404,15 @@ app.post("/discord", async (req,res) => {
           color: URGENCY[t.urgency].color,
           fields:[
             {name:'Urgency',      value:URGENCY[t.urgency].label, inline:true},
-            {name:'Nag interval', value:nagLabel,                 inline:true},
+            {name:'Nag interval', value:nagLbl,                   inline:true},
+            {name:'Due date',     value:dueLbl,                   inline:true},
           ],
-          footer:{text:'Open the web app to set a due date and reminder schedule.'},
+          footer:{text:'Open the web app to set custom reminder schedules.'},
           timestamp:new Date().toISOString()
         }],
         components: taskActionRow(t.id)
       });
-      await sendTelegram(`✅ New task added from Discord: <b>${t.name}</b> (${URGENCY[t.urgency].label})`);
+      await sendTelegram(`✅ New task added from Discord: <b>${t.name}</b>\n${URGENCY[t.urgency].label}${due?' · due '+fmtDate(due):''}`);
       pendingAdd = null;
       return;
     }
