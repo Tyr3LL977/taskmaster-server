@@ -1,19 +1,16 @@
 {
   "name": "taskmaster-server",
-  "version": "1.0.0",
-  "description": "Taskmaster backend — Discord bot + Telegram backup + scheduler",
+  "version": "2.0.0",
+  "description": "Taskmaster — full team task system with Discord bot, Telegram backup, persistent storage",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "tweetnacl": "^1.0.3"
+    "tweetnacl": "^1.0.3",
+    "pg": "^8.11.3"
   }
 }
