@@ -297,22 +297,65 @@ async function registerCommands() {
 
 // ── KEYBOARDS ─────────────────────────────────────────────────────────────────
 function urgencyRow()   { return [{type:1,components:[{type:2,style:3,label:'🟢 Normal',custom_id:'urg_normal'},{type:2,style:1,label:'🟡 Urgent',custom_id:'urg_urgent'},{type:2,style:4,label:'🔴 DROP EVERYTHING',custom_id:'urg_defcon'}]}]; }
-function nagRow()       { return [{type:1,components:[{type:2,style:2,label:'Every 15 min',custom_id:'nag_15'},{type:2,style:2,label:'Every 30 min',custom_id:'nag_30'},{type:2,style:2,label:'Every hour',custom_id:'nag_60'},{type:2,style:2,label:'Every 2 hrs',custom_id:'nag_120'}]},{type:1,components:[{type:2,style:2,label:'No auto-nag',custom_id:'nag_0'}]}]; }
-function dueDateRow()   { return [{type:1,components:[{type:2,style:2,label:'Today',custom_id:'due_0'},{type:2,style:2,label:'Tomorrow',custom_id:'due_1'},{type:2,style:2,label:'3 days',custom_id:'due_3'},{type:2,style:2,label:'1 week',custom_id:'due_7'}]},{type:1,components:[{type:2,style:2,label:'2 weeks',custom_id:'due_14'},{type:2,style:2,label:'1 month',custom_id:'due_30'},{type:2,style:1,label:'No due date',custom_id:'due_none'}]}]; }
-function changeDueDateRow(taskId) { return [{type:1,components:[{type:2,style:2,label:'Today',custom_id:`chgdue_${taskId}_0`},{type:2,style:2,label:'Tomorrow',custom_id:`chgdue_${taskId}_1`},{type:2,style:2,label:'+3 days',custom_id:`chgdue_${taskId}_3`},{type:2,style:2,label:'+1 week',custom_id:`chgdue_${taskId}_7`}]},{type:1,components:[{type:2,style:2,label:'+2 weeks',custom_id:`chgdue_${taskId}_14`},{type:2,style:2,label:'+1 month',custom_id:`chgdue_${taskId}_30`},{type:2,style:4,label:'Remove date',custom_id:`chgdue_${taskId}_none`}]}]; }
-function snoozeReasonRow(taskId) { return [{type:1,components:[{type:2,style:2,label:'Waiting for client',custom_id:`snzr_${taskId}_client`},{type:2,style:2,label:'Blocked internally',custom_id:`snzr_${taskId}_blocked`},{type:2,style:2,label:'In progress',custom_id:`snzr_${taskId}_wip`},{type:2,style:2,label:'No reason',custom_id:`snzr_${taskId}_none`}]}]; }
-function taskActionRow(taskId, assigneeId, hasComments) {
+function nagRow()     { return [{type:1,components:[{type:2,style:2,label:'Every 15 min',custom_id:'nag_15'},{type:2,style:2,label:'Every 30 min',custom_id:'nag_30'},{type:2,style:2,label:'Every hour',custom_id:'nag_60'},{type:2,style:2,label:'Every 2 hrs',custom_id:'nag_120'}]},{type:1,components:[{type:2,style:2,label:'No auto-nag',custom_id:'nag_0'}]}]; }
+function dueDateRow() { return [{type:1,components:[{type:2,style:2,label:'Today',custom_id:'due_0'},{type:2,style:2,label:'Tomorrow',custom_id:'due_1'},{type:2,style:2,label:'3 days',custom_id:'due_3'},{type:2,style:2,label:'1 week',custom_id:'due_7'}]},{type:1,components:[{type:2,style:2,label:'2 weeks',custom_id:'due_14'},{type:2,style:2,label:'1 month',custom_id:'due_30'},{type:2,style:1,label:'No due date',custom_id:'due_none'}]}]; }
+
+// Move task menu — change due date + stop follow-up
+function moveTaskRow(taskId) {
+  return [
+    {type:1,components:[
+      {type:2,style:2,label:'Move to tomorrow',  custom_id:`mv_${taskId}_1`},
+      {type:2,style:2,label:'Move to next week', custom_id:`mv_${taskId}_7`},
+      {type:2,style:2,label:'+2 weeks',          custom_id:`mv_${taskId}_14`},
+      {type:2,style:2,label:'+1 month',          custom_id:`mv_${taskId}_30`},
+    ]},
+    {type:1,components:[
+      {type:2,style:1,label:'🌙 Stop today — resume 9AM tomorrow', custom_id:`mv_${taskId}_pause`},
+      {type:2,style:4,label:'Remove due date',   custom_id:`mv_${taskId}_none`},
+    ]}
+  ];
+}
+
+// Status / comment menu
+function statusRow(taskId) {
+  return [{type:1,components:[
+    {type:2,style:2,label:'⏳ Waiting for client',    custom_id:`st_${taskId}_client`},
+    {type:2,style:2,label:'🔒 Blocked internally',    custom_id:`st_${taskId}_blocked`},
+    {type:2,style:1,label:'🔄 In progress',            custom_id:`st_${taskId}_wip`},
+    {type:2,style:4,label:'⬆️ Escalate',              custom_id:`st_${taskId}_escalate`},
+  ]}];
+}
+
+// Recurring menu
+function recurringRow(taskId) {
+  return [{type:1,components:[
+    {type:2,style:2,label:'🔁 Daily',    custom_id:`rec_${taskId}_daily`},
+    {type:2,style:2,label:'🔁 Weekly',   custom_id:`rec_${taskId}_weekly`},
+    {type:2,style:2,label:'🔁 Monthly',  custom_id:`rec_${taskId}_monthly`},
+    {type:2,style:4,label:'✖ One-time', custom_id:`rec_${taskId}_none`},
+  ]}];
+}
+
+// Post-done recurring prompt
+function afterDoneRow(taskId) {
+  return [{type:1,components:[
+    {type:2,style:2,label:'🔁 Make it daily',    custom_id:`afd_${taskId}_daily`},
+    {type:2,style:2,label:'🔁 Make it weekly',   custom_id:`afd_${taskId}_weekly`},
+    {type:2,style:2,label:'🔁 Make it monthly',  custom_id:`afd_${taskId}_monthly`},
+    {type:2,style:1,label:'✖ No, one-time only', custom_id:`afd_${taskId}_none`},
+  ]}];
+}
+
+function taskActionRow(taskId, assigneeId) {
   const row1=[
     {type:2,style:3,label:'✅ Done',        custom_id:`act_done_${taskId}`},
-    {type:2,style:2,label:'⏸ Snooze',      custom_id:`act_snooze_${taskId}`},
-    {type:2,style:2,label:'📅 Change due',  custom_id:`act_changedue_${taskId}`},
+    {type:2,style:2,label:'📅 Move task',   custom_id:`act_move_${taskId}`},
+    {type:2,style:2,label:'💬 Status',      custom_id:`act_status_${taskId}`},
+    {type:2,style:2,label:'🔄 Recurring',   custom_id:`act_recur_${taskId}`},
     {type:2,style:4,label:'🗑 Delete',      custom_id:`act_delete_${taskId}`},
   ];
-  const row2=[];
-  if (assigneeId) row2.push({type:2,style:4,label:'☎️ CALL THEM',custom_id:`act_call_${taskId}`});
-  if (hasComments) row2.push({type:2,style:2,label:'💬 Comments',custom_id:`act_comments_${taskId}`});
   const rows=[{type:1,components:row1}];
-  if (row2.length) rows.push({type:1,components:row2});
+  if (assigneeId) rows.push({type:1,components:[{type:2,style:4,label:'☎️ CALL THEM',custom_id:`act_call_${taskId}`}]});
   return rows;
 }
 
@@ -501,7 +544,7 @@ app.post('/discord', async (req,res) => {
       const t=tasks[n]; const oldDate=t.due;
       t.due=newDate; t.dueFiredDays=[];
       await saveTask(t);
-      await editInteractionReply(token,{embeds:[{title:`📅 Due date updated: ${t.name}`,description:`${oldDate?`~~${fmtDate(oldDate)}~~ → `:''  }**${fmtDate(newDate)}**`,color:5793266,timestamp:new Date().toISOString()}],components:taskActionRow(t.id,t.assigneeId,t.comments?.length>0)});
+      await editInteractionReply(token,{embeds:[{title:`📅 Due date updated: ${t.name}`,description:`${oldDate?`~~${fmtDate(oldDate)}~~ → `:''  }**${fmtDate(newDate)}**`,color:5793266,timestamp:new Date().toISOString()}],components:taskActionRow(t.id,t.assigneeId)});
       if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`📅 Due date changed: ${t.name}`,description:`New due date: **${fmtDate(newDate)}**`,color:5793266,timestamp:new Date().toISOString()}]);
       return;
     }
@@ -619,7 +662,7 @@ app.post('/discord', async (req,res) => {
       const dueLbl=due?fmtDate(due):'No due date';
       const fields=[{name:'Urgency',value:URGENCY[t.urgency].label,inline:true},{name:'Nag',value:nagLbl,inline:true},{name:'Due',value:dueLbl,inline:true}];
       if(t.assigneeId) fields.push({name:'Assigned to',value:`<@${t.assigneeId}>`,inline:true});
-      await editInteractionReply(pendingAdd.token,{content:'',embeds:[{title:`✅ Task added: ${t.name}`,color:URGENCY[t.urgency].color,fields,timestamp:new Date().toISOString()}],components:taskActionRow(t.id,t.assigneeId,false)});
+      await editInteractionReply(pendingAdd.token,{content:'',embeds:[{title:`✅ Task added: ${t.name}`,color:URGENCY[t.urgency].color,fields,timestamp:new Date().toISOString()}],components:taskActionRow(t.id,t.assigneeId)});
       if(t.assigneeId){
         await sendDM(t.assigneeId,null,[{title:'📋 New task assigned to you',description:`**${t.name}**\n\nAssigned by **${invoker}**`,color:URGENCY[t.urgency].color,fields:[{name:'Urgency',value:URGENCY[t.urgency].label,inline:true},{name:'Due',value:dueLbl,inline:true}],timestamp:new Date().toISOString()}]);
         await sendDiscord(`📋 <@${t.assigneeId}> — new task: **${t.name}** (${URGENCY[t.urgency].label}${due?' · due '+dueLbl:''})`);
@@ -630,98 +673,124 @@ app.post('/discord', async (req,res) => {
     }
 
     // Snooze reason buttons
-    if (data.startsWith('snzr_')) {
+    // Status update buttons
+    if (data.startsWith('st_')) {
       const parts=data.split('_'); parts.shift();
-      const reason=parts.pop();
-      const taskId=parts.join('_');
+      const stKey=parts.pop(); const taskId=parts.join('_');
       const t=tasks.find(x=>x.id===taskId);
       if(t){
-        t.snoozedUntil=new Date(Date.now()+30*60*1000).toISOString();
-        const reasonLabel=reason==='client'?'Waiting for client':reason==='blocked'?'Blocked internally':reason==='wip'?'In progress':'No reason given';
-        t.snoozeReason=reasonLabel;
+        const labels={client:'⏳ Waiting for client',blocked:'🔒 Blocked internally',wip:'🔄 In progress — working on it',escalate:'⬆️ Escalated to lead'};
+        const statusLabel=labels[stKey]||stKey;
+        t.status=stKey==='wip'?'inprogress':stKey==='client'?'waiting_client':stKey==='blocked'?'blocked':'escalated';
         t.comments=t.comments||[];
-        t.comments.push({by:invoker,text:`Snoozed: ${reasonLabel}`,at:new Date().toISOString()});
+        t.comments.push({by:invoker,text:statusLabel,at:new Date().toISOString()});
+        // Stop nag for today if waiting/blocked
+        if(stKey==='client'||stKey==='blocked'){
+          const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(9,0,0,0);
+          t.snoozedUntil=tomorrow.toISOString();
+        }
         await saveTask(t);
         await editDiscordMsg(msgId,'',
-          [{title:`⏸ Snoozed: ${t.name}`,description:`Reason: **${reasonLabel}**\n\nI'll be back in 30 min. 😏`,color:5793266}],
-          taskActionRow(t.id,t.assigneeId,t.comments.length>0)
+          [{title:`💬 Status updated: ${t.name}`,description:`**${invoker}** marked: **${statusLabel}**`+(stKey==='client'||stKey==='blocked'?'\n\n_Nags paused until 9 AM tomorrow._':''),color:stKey==='wip'?3066993:stKey==='escalate'?15158332:16776960,timestamp:new Date().toISOString()}],
+          taskActionRow(t.id,t.assigneeId)
         );
-        // Notify lead so they know why
-        if(t.assigneeId&&reason!=='none') await sendDiscord(null,[{title:`⏸ ${t.name} snoozed`,description:`<@${t.assigneeId}> snoozed this task.\nReason: **${reasonLabel}**`,color:5793266,timestamp:new Date().toISOString()}]);
+        // Notify lead if assignee updated status
+        if(t.assigneeId&&body.member?.user?.id===t.assigneeId){
+          await sendDiscord(null,[{title:`💬 Status update from assignee: ${t.name}`,description:`<@${t.assigneeId}> updated status: **${statusLabel}**`,color:5793266,timestamp:new Date().toISOString()}]);
+        }
+        if(stKey==='escalate'){
+          await sendDiscord(`🚨 **ESCALATED:** <@${t.assigneeId||'someone'}> has escalated **${t.name}** — it needs your attention.`);
+        }
+        await sendTelegram(`💬 Status on <b>${t.name}</b>: ${statusLabel} (by ${invoker})`);
       }
       return;
     }
 
-    if (data.startsWith('act_done_')) {
-      const t=tasks.find(x=>x.id===data.replace('act_done_',''));
-      if(t){
-        t.done=true;t.nagCount=0;t.status='done';t.completedAt=new Date().toISOString();
-        if(chaosMap[t.id]){clearInterval(chaosMap[t.id].interval);delete chaosMap[t.id];}
-        const unblocked=tasks.filter(x=>!x.done&&x.dependsOn?.includes(t.id)&&!isBlocked(x));
-        await saveTask(t);
-        await editDiscordMsg(msgId,'',
-          [{title:`✅ Done: ${t.name}`,description:`Marked done by **${invoker}**. Nice work! 💪`,color:3066993,timestamp:new Date().toISOString()}],
-          []
-        );
-        if(unblocked.length) await sendDiscord(null,[{title:'🔓 Tasks unblocked!',description:unblocked.map(x=>`• **${x.name}**`).join('\n'),color:3066993,timestamp:new Date().toISOString()}]);
-        await sendTelegram(`✅ Done: <b>${t.name}</b> 💪`);
-      }
-      return;
-    }
-    if (data.startsWith('act_snooze_')) {
-      const t=tasks.find(x=>x.id===data.replace('act_snooze_',''));
-      if(t) await editDiscordMsg(msgId,'',
-        [{title:`⏸ Snoozing: ${t.name}`,description:'Why are you snoozing this?',color:5793266}],
-        snoozeReasonRow(t.id)
-      );
-      return;
-    }
-    if (data.startsWith('act_changedue_')) {
-      const t=tasks.find(x=>x.id===data.replace('act_changedue_',''));
-      if(t) await editDiscordMsg(msgId,`📅 **Change due date for: ${t.name}**${t.due?`\nCurrent: **${fmtDate(t.due)}**`:''}`,[], changeDueDateRow(t.id));
-      return;
-    }
-    if (data.startsWith('chgdue_')) {
+    // Move task buttons
+    if (data.startsWith('mv_')) {
       const parts=data.split('_'); parts.shift();
       const val=parts.pop(); const taskId=parts.join('_');
       const t=tasks.find(x=>x.id===taskId);
       if(t){
-        let newDate='';
-        if(val!=='none'){const d=new Date();d.setDate(d.getDate()+parseInt(val));newDate=d.toISOString().slice(0,10);}
-        const oldDate=t.due; t.due=newDate; t.dueFiredDays=[];
-        await saveTask(t);
-        const dueLbl=newDate?fmtDate(newDate):'No due date';
-        await editDiscordMsg(msgId,'',
-          [{title:`📅 Due date updated: ${t.name}`,description:`${oldDate?`~~${fmtDate(oldDate)}~~ → `:''}**${dueLbl}**`,color:5793266,timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId,t.comments?.length>0)
-        );
-        if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`📅 Due date changed: ${t.name}`,description:`New due date: **${dueLbl}**`,color:5793266,timestamp:new Date().toISOString()}]);
+        if(val==='pause'){
+          // Stop follow-up for today, resume 9 AM tomorrow
+          const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(9,0,0,0);
+          t.snoozedUntil=tomorrow.toISOString();
+          await saveTask(t);
+          await editDiscordMsg(msgId,'',
+            [{title:`🌙 Follow-up paused: ${t.name}`,description:`All nags stopped for today.
+
+I'll resume at **9 AM tomorrow**. 😴`,color:5793266,timestamp:new Date().toISOString()}],
+            taskActionRow(t.id,t.assigneeId)
+          );
+          if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`🌙 Follow-up paused: ${t.name}`,description:'No more nags today. Resumes 9 AM tomorrow.',color:5793266}]);
+        } else {
+          const oldDue=t.due;
+          if(val==='none'){
+            t.due='';
+          } else {
+            const base=t.due?new Date(t.due+'T00:00:00'):new Date();
+            // Move relative to current due date if it exists, else from today
+            base.setDate(base.getDate()+parseInt(val));
+            t.due=base.toISOString().slice(0,10);
+          }
+          t.dueFiredDays=[];
+          await saveTask(t);
+          const dueLbl=t.due?fmtDate(t.due):'No due date';
+          await editDiscordMsg(msgId,'',
+            [{title:`📅 Task moved: ${t.name}`,description:`${oldDue?`~~${fmtDate(oldDue)}~~ → `:''}**${dueLbl}**`,color:5793266,timestamp:new Date().toISOString()}],
+            taskActionRow(t.id,t.assigneeId)
+          );
+          if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`📅 Due date updated: ${t.name}`,description:`New due date: **${dueLbl}**`,color:5793266}]);
+        }
       }
       return;
     }
-    if (data.startsWith('act_delete_')) {
-      const id=data.replace('act_delete_',''), t=tasks.find(x=>x.id===id);
-      if(t){tasks=tasks.filter(x=>x.id!==id);await deleteTaskDb(id);if(chaosMap[id]){clearInterval(chaosMap[id].interval);delete chaosMap[id];}await editDiscordMsg(msgId,`🗑 Removed: **${t.name}**`,[],[]);}
-      return;
-    }
-    if (data.startsWith('act_comments_')) {
-      const t=tasks.find(x=>x.id===data.replace('act_comments_',''));
+
+    // Recurring buttons (from card)
+    if (data.startsWith('rec_')) {
+      const parts=data.split('_'); parts.shift();
+      const freq=parts.pop(); const taskId=parts.join('_');
+      const t=tasks.find(x=>x.id===taskId);
       if(t){
-        const comments=t.comments||[];
-        const desc=comments.length?comments.slice(-5).map(c=>`**${c.by}** _${new Date(c.at).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}_\n${c.text}`).join('\n\n'):'No comments yet.';
-        await editDiscordMsg(msgId,null,
-          [{title:`💬 Comments: ${t.name}`,description:desc,color:5793266,footer:{text:'Showing last 5 comments'},timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId,true)
+        t.recurring=freq==='none'?null:freq;
+        await saveTask(t);
+        const label=freq==='none'?'One-time (recurring removed)':freq==='daily'?'🔁 Daily':freq==='weekly'?'🔁 Weekly':'🔁 Monthly';
+        await editDiscordMsg(msgId,'',
+          [{title:`🔄 Recurring updated: ${t.name}`,description:`Set to: **${label}**`,color:5793266,timestamp:new Date().toISOString()}],
+          taskActionRow(t.id,t.assigneeId)
         );
       }
       return;
     }
+
+    // After-done recurring prompt
+    if (data.startsWith('afd_')) {
+      const parts=data.split('_'); parts.shift();
+      const freq=parts.pop(); const taskId=parts.join('_');
+      const t=tasks.find(x=>x.id===taskId);
+      if(t&&freq!=='none'){
+        t.recurring=freq;
+        await saveTask(t);
+        await editDiscordMsg(msgId,'',
+          [{title:`🔁 Set to recurring: ${t.name}`,description:`Will auto-recreate **${freq}** from now on.`,color:3066993,timestamp:new Date().toISOString()}],
+          []
+        );
+      } else {
+        await editDiscordMsg(msgId,'',
+          [{title:`✅ Done: ${t?.name||'task'}`,description:'One-time task. All done! 💪',color:3066993}],
+          []
+        );
+      }
+      return;
+    }
+
     if (data.startsWith('act_call_')) {
       const t=tasks.find(x=>x.id===data.replace('act_call_',''));
       if(t){
         await editDiscordMsg(msgId,'',
           [{title:`☎️ CALLING: ${t.name}`,description:`Chaos activated by **${invoker}** — <@${t.assigneeId}> is being summoned. 🚨`,color:15158332,timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId,t.comments?.length>0)
+          taskActionRow(t.id,t.assigneeId)
         );
         await triggerChaosCall(t,guildId,invoker);
       }
@@ -809,7 +878,7 @@ async function createRecurringTask(original) {
     t.due=d.toISOString().slice(0,10);
   }
   tasks.push(t); await saveTask(t);
-  await sendDiscord(null,[{title:`🔄 Recurring task created: ${t.name}`,description:`Auto-created from recurring schedule.${t.due?`\nDue: **${fmtDate(t.due)}**`:''}`,color:5793266,timestamp:new Date().toISOString()}],taskActionRow(t.id,t.assigneeId,false));
+  await sendDiscord(null,[{title:`🔄 Recurring task created: ${t.name}`,description:`Auto-created from recurring schedule.${t.due?`\nDue: **${fmtDate(t.due)}**`:''}`,color:5793266,timestamp:new Date().toISOString()}],taskActionRow(t.id,t.assigneeId));
 }
 
 // ── SCHEDULED JOBS ────────────────────────────────────────────────────────────
@@ -841,7 +910,7 @@ cron.schedule('* * * * *', async () => {
           await saveTask(t);
           await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
             [{title:`📅 Due date alert: ${t.name}`,description:mention+msgTxt,color,fields:[{name:'Due',value:fmtDate(t.due),inline:true},{name:'Urgency',value:URGENCY[t.urgency||'normal'].label,inline:true},...(t.assigneeId?[{name:'Assigned to',value:`<@${t.assigneeId}>`,inline:true}]:[])],timestamp:new Date().toISOString()}],
-            taskActionRow(t.id,t.assigneeId,t.comments?.length>0)
+            taskActionRow(t.id,t.assigneeId)
           );
           if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`📅 Due date alert: ${t.name}`,description:msgTxt,color,timestamp:new Date().toISOString()}]);
           await sendTelegram(msgTxt.replace(/\*\*/g,'').replace(/\*/g,''));
@@ -860,7 +929,7 @@ cron.schedule('* * * * *', async () => {
         const mention=t.assigneeId?`<@${t.assigneeId}> `:'';
         await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
           [{title:`🚨 AUTO-ESCALATED: ${t.name}`,description:`${mention}Now **DROP EVERYTHING**.\n\n> Due: **${fmtDate(t.due)}** · Nag every **${r.nagDefcon} min**`,color:15158332,timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId,t.comments?.length>0)
+          taskActionRow(t.id,t.assigneeId)
         );
         if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`🚨 Escalated: ${t.name}`,description:`DROP EVERYTHING. Due: **${fmtDate(t.due)}**`,color:15158332,timestamp:new Date().toISOString()}]);
         await sendTelegram(`🚨 AUTO-ESCALATED: <b>${t.name}</b> → DROP EVERYTHING`);
@@ -870,7 +939,7 @@ cron.schedule('* * * * *', async () => {
         const mention=t.assigneeId?`<@${t.assigneeId}> `:'';
         await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
           [{title:`⚡ AUTO-ESCALATED: ${t.name}`,description:`${mention}Now **Urgent**.\n\n> Due in **${dl} day${dl===1?'':'s'}** · Nag every **${r.nagUrgent} min**`,color:16776960,timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId,t.comments?.length>0)
+          taskActionRow(t.id,t.assigneeId)
         );
         if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`⚡ Escalated: ${t.name}`,description:`Now Urgent. Due in ${dl} day${dl===1?'':'s'}.`,color:16776960,timestamp:new Date().toISOString()}]);
         await sendTelegram(`⚡ AUTO-ESCALATED: <b>${t.name}</b> → Urgent`);
@@ -889,7 +958,7 @@ cron.schedule('* * * * *', async () => {
         await saveTask(t);
         await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
           [{title:`🔔 Nag #${t.nagCount}: ${t.name}`,description:mention+msgTxt,color:urg.color,fields:[...(t.due?[{name:'Due',value:fmtDate(t.due),inline:true}]:[]),...(t.assigneeId?[{name:'Assigned to',value:`<@${t.assigneeId}>`,inline:true}]:[]),...(t.snoozeReason?[{name:'Last snooze reason',value:t.snoozeReason,inline:true}]:[])],timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId,t.comments?.length>0)
+          taskActionRow(t.id,t.assigneeId)
         );
         if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`🔔 Reminder: ${t.name}`,description:msgTxt,color:urg.color,timestamp:new Date().toISOString()}]);
         await sendTelegram(msgTxt.replace(/\*\*/g,'').replace(/\*/g,''));
@@ -904,7 +973,7 @@ cron.schedule('* * * * *', async () => {
     else if(r.freq==='weekly'){if((r.days||[]).includes(today)&&r.time===hhmm){fire=true;key=`w_${date}_${hhmm}`;}}
     else if(r.freq==='monthly'){const mD=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();const tgt=Math.min(r.day||1,mD);if(dom===tgt&&r.time===hhmm){fire=true;key=`m_${date}_${hhmm}`;}}
     else if(r.freq==='once'){if(r.date===date&&r.time===hhmm){fire=true;key=`o_${date}_${hhmm}`;}}
-    if(fire&&key){r.firedIds=r.firedIds||[];if(!r.firedIds.includes(key)){r.firedIds.push(key);await saveTask(t);await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,[{title:`🔔 Scheduled reminder: ${t.name}`,color:5793266,timestamp:new Date().toISOString()}],taskActionRow(t.id,t.assigneeId,t.comments?.length>0));}}
+    if(fire&&key){r.firedIds=r.firedIds||[];if(!r.firedIds.includes(key)){r.firedIds.push(key);await saveTask(t);await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,[{title:`🔔 Scheduled reminder: ${t.name}`,color:5793266,timestamp:new Date().toISOString()}],taskActionRow(t.id,t.assigneeId));}}
   }
 
   // Recurring task creation when marked done
