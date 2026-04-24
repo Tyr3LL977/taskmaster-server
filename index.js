@@ -38,6 +38,12 @@ async function dbInit() {
       tasks JSONB NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS member_channels (
+      user_id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      username TEXT,
+      registered_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
   console.log('Database ready ✅');
 }
@@ -47,6 +53,64 @@ async function loadTasks() {
   const r = await db.query('SELECT data FROM tasks ORDER BY created_at ASC');
   tasks = r.rows.map(row => row.data);
   console.log(`Loaded ${tasks.length} tasks from database`);
+}
+
+// member channel registry: userId -> { channelId, username }
+let memberChannels = {};
+
+async function loadMemberChannels() {
+  if (!db) return;
+  const r = await db.query('SELECT * FROM member_channels');
+  memberChannels = {};
+  for (const row of r.rows) {
+    memberChannels[row.user_id] = { channelId: row.channel_id, username: row.username };
+  }
+  console.log(`Loaded ${Object.keys(memberChannels).length} member channels`);
+}
+
+async function saveMemberChannel(userId, channelId, username) {
+  memberChannels[userId] = { channelId, username };
+  if (!db) return;
+  await db.query(
+    `INSERT INTO member_channels (user_id, channel_id, username) VALUES ($1,$2,$3)
+     ON CONFLICT (user_id) DO UPDATE SET channel_id=$2, username=$3`,
+    [userId, channelId, username]
+  );
+}
+
+async function deleteMemberChannel(userId) {
+  delete memberChannels[userId];
+  if (!db) return;
+  await db.query('DELETE FROM member_channels WHERE user_id=$1', [userId]);
+}
+
+// Send to a specific member's channel (falls back to DM, then main channel)
+async function sendToMember(userId, content, embeds, components) {
+  const mc = memberChannels[userId];
+  if (mc?.channelId) {
+    const b = {};
+    if (content)    b.content = content;
+    if (embeds)     b.embeds  = embeds;
+    if (components) b.components = components;
+    return dReq('POST', `/channels/${mc.channelId}/messages`, b);
+  }
+  // Fallback: DM
+  return sendDM(userId, content, embeds);
+}
+
+// Broadcast to ALL member channels + main channel (for team-wide announcements)
+async function broadcast(content, embeds) {
+  await sendDiscord(content, embeds);
+  const seen = new Set([DISCORD_CHANNEL]);
+  for (const { channelId } of Object.values(memberChannels)) {
+    if (!seen.has(channelId)) {
+      seen.add(channelId);
+      const b = {};
+      if (content) b.content = content;
+      if (embeds)  b.embeds  = embeds;
+      await dReq('POST', `/channels/${channelId}/messages`, b).catch(()=>{});
+    }
+  }
 }
 
 async function saveTask(t) {
@@ -290,6 +354,9 @@ async function registerCommands() {
     {name:'template',   description:'Create tasks from a template',     options:[{name:'type',type:3,description:'Template type',required:true,choices:[{name:'Client Onboarding',value:'onboarding'},{name:'Implementation Sprint',value:'implementation'},{name:'Weekly Review',value:'weekly_review'}]}]},
     {name:'leaderboard',description:'See team stats and leaderboard'},
     {name:'summary',    description:'Get your task summary'},
+    {name:'register',   description:'Register this channel as your personal task channel'},
+    {name:'unregister', description:'Remove your personal channel registration'},
+    {name:'team',       description:'Show all registered team members and their channels'},
   ];
   await dReq('PUT',`/applications/${DISCORD_APP_ID}/commands`,commands);
   console.log('Discord slash commands registered ✅');
@@ -624,6 +691,40 @@ app.post('/discord', async (req,res) => {
       await editInteractionReply(token,{embeds:[{title:'🏆 Team Leaderboard',color:16766720,fields,timestamp:new Date().toISOString()}]});
       return;
     }
+    if (cmd==='register') {
+      const channelId = body.channel_id;
+      const userId    = body.member?.user?.id;
+      const username  = body.member?.user?.username||'Unknown';
+      if (!channelId||!userId) { await editInteractionReply(token,{content:'Could not detect channel or user.'}); return; }
+      await saveMemberChannel(userId, channelId, username);
+      await editInteractionReply(token,{embeds:[{
+        title:'✅ Channel registered!',
+        description:`**${username}** — this channel is now your personal task channel.
+
+All tasks assigned to you will appear here. Your colleagues won't see this channel's tasks.`,
+        color:3066993, timestamp:new Date().toISOString()
+      }]});
+      // Announce in main channel
+      await sendDiscord(null,[{title:'👋 Team member registered',description:`**${username}** has set up their personal task channel.`,color:5793266,timestamp:new Date().toISOString()}]);
+      return;
+    }
+
+    if (cmd==='unregister') {
+      const userId=body.member?.user?.id;
+      const username=body.member?.user?.username||'Unknown';
+      await deleteMemberChannel(userId);
+      await editInteractionReply(token,{content:`✅ **${username}** — your channel registration has been removed. Tasks will now come to you via DM.`});
+      return;
+    }
+
+    if (cmd==='team') {
+      const members=Object.entries(memberChannels);
+      if(!members.length){await editInteractionReply(token,{content:'No team members registered yet. Ask them to run `/register` in their channel.'});return;}
+      const lines=members.map(([uid,{channelId,username}])=>`• **${username||uid}** → <#${channelId}>`).join('\n');
+      await editInteractionReply(token,{embeds:[{title:`👥 Registered team (${members.length})`,description:lines,color:5793266,timestamp:new Date().toISOString()}]});
+      return;
+    }
+
     if (cmd==='summary') { await sendSummary('manual',token); return; }
     return;
   }
@@ -664,8 +765,14 @@ app.post('/discord', async (req,res) => {
       if(t.assigneeId) fields.push({name:'Assigned to',value:`<@${t.assigneeId}>`,inline:true});
       await editInteractionReply(pendingAdd.token,{content:'',embeds:[{title:`✅ Task added: ${t.name}`,color:URGENCY[t.urgency].color,fields,timestamp:new Date().toISOString()}],components:taskActionRow(t.id,t.assigneeId)});
       if(t.assigneeId){
-        await sendDM(t.assigneeId,null,[{title:'📋 New task assigned to you',description:`**${t.name}**\n\nAssigned by **${invoker}**`,color:URGENCY[t.urgency].color,fields:[{name:'Urgency',value:URGENCY[t.urgency].label,inline:true},{name:'Due',value:dueLbl,inline:true}],timestamp:new Date().toISOString()}]);
-        await sendDiscord(`📋 <@${t.assigneeId}> — new task: **${t.name}** (${URGENCY[t.urgency].label}${due?' · due '+dueLbl:''})`);
+        // Post to their personal channel (or DM fallback)
+        await sendToMember(t.assigneeId,
+          `📋 <@${t.assigneeId}> — new task assigned by **${invoker}**`,
+          [{title:`📋 ${t.name}`,color:URGENCY[t.urgency].color,fields:[{name:'Urgency',value:URGENCY[t.urgency].label,inline:true},{name:'Due',value:dueLbl,inline:true},{name:'Assigned by',value:invoker,inline:true}],timestamp:new Date().toISOString()}],
+          taskActionRow(t.id,t.assigneeId)
+        );
+        // Also post summary in main channel (no task details)
+        await sendDiscord(null,[{title:'📋 Task assigned',description:`**${t.name}** → assigned to **${t.assigneeName||'someone'}**`,color:URGENCY[t.urgency].color,fields:[{name:'Urgency',value:URGENCY[t.urgency].label,inline:true},{name:'Due',value:dueLbl,inline:true}],timestamp:new Date().toISOString()}]);
       }
       await sendTelegram(`✅ New task: <b>${t.name}</b>${t.assigneeName?' → '+t.assigneeName:''}`);
       pendingAdd=null;
@@ -699,7 +806,12 @@ app.post('/discord', async (req,res) => {
           await sendDiscord(null,[{title:`💬 Status update from assignee: ${t.name}`,description:`<@${t.assigneeId}> updated status: **${statusLabel}**`,color:5793266,timestamp:new Date().toISOString()}]);
         }
         if(stKey==='escalate'){
-          await sendDiscord(`🚨 **ESCALATED:** <@${t.assigneeId||'someone'}> has escalated **${t.name}** — it needs your attention.`);
+          await broadcast(
+            `🚨 **ESCALATED by ${invoker}:** **${t.name}** needs immediate attention!`,
+            [{title:`🚨 Task escalated: ${t.name}`,description:`**${invoker}** has flagged this as needing immediate attention.
+
+This is a team-wide announcement.`,color:15158332,timestamp:new Date().toISOString()}]
+          );
         }
         await sendTelegram(`💬 Status on <b>${t.name}</b>: ${statusLabel} (by ${invoker})`);
       }
@@ -927,21 +1039,25 @@ cron.schedule('* * * * *', async () => {
         t.escalationFired.defcon=true; t.urgency='defcon'; t.nagInterval=r.nagDefcon;
         await saveTask(t);
         const mention=t.assigneeId?`<@${t.assigneeId}> `:'';
-        await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
-          [{title:`🚨 AUTO-ESCALATED: ${t.name}`,description:`${mention}Now **DROP EVERYTHING**.\n\n> Due: **${fmtDate(t.due)}** · Nag every **${r.nagDefcon} min**`,color:15158332,timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId)
-        );
-        if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`🚨 Escalated: ${t.name}`,description:`DROP EVERYTHING. Due: **${fmtDate(t.due)}**`,color:15158332,timestamp:new Date().toISOString()}]);
+        if(t.assigneeId){
+          await sendToMember(t.assigneeId,`<@${t.assigneeId}>`,
+            [{title:`🚨 AUTO-ESCALATED: ${t.name}`,description:`Now **DROP EVERYTHING**. Due: **${fmtDate(t.due)}** · Nag every **${r.nagDefcon} min**`,color:15158332,timestamp:new Date().toISOString()}],
+            taskActionRow(t.id,t.assigneeId)
+          );
+        }
+        // Always announce escalation in main channel
+        await sendDiscord(null,[{title:`🚨 Task escalated to DROP EVERYTHING`,description:`**${t.name}**${t.assigneeName?' → '+t.assigneeName:''}`,color:15158332,timestamp:new Date().toISOString()}]);
         await sendTelegram(`🚨 AUTO-ESCALATED: <b>${t.name}</b> → DROP EVERYTHING`);
       } else if(dl!==null&&dl<=r.daysUrgent&&t.urgency==='normal'&&!t.escalationFired.urgent){
         t.escalationFired.urgent=true; t.urgency='urgent'; t.nagInterval=r.nagUrgent;
         await saveTask(t);
-        const mention=t.assigneeId?`<@${t.assigneeId}> `:'';
-        await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
-          [{title:`⚡ AUTO-ESCALATED: ${t.name}`,description:`${mention}Now **Urgent**.\n\n> Due in **${dl} day${dl===1?'':'s'}** · Nag every **${r.nagUrgent} min**`,color:16776960,timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId)
-        );
-        if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`⚡ Escalated: ${t.name}`,description:`Now Urgent. Due in ${dl} day${dl===1?'':'s'}.`,color:16776960,timestamp:new Date().toISOString()}]);
+        if(t.assigneeId){
+          await sendToMember(t.assigneeId,`<@${t.assigneeId}>`,
+            [{title:`⚡ AUTO-ESCALATED: ${t.name}`,description:`Now **Urgent**. Due in **${dl} day${dl===1?'':'s'}** · Nag every **${r.nagUrgent} min**`,color:16776960,timestamp:new Date().toISOString()}],
+            taskActionRow(t.id,t.assigneeId)
+          );
+        }
+        await sendDiscord(null,[{title:`⚡ Task escalated to Urgent`,description:`**${t.name}**${t.assigneeName?' → '+t.assigneeName:''}`,color:16776960,timestamp:new Date().toISOString()}]);
         await sendTelegram(`⚡ AUTO-ESCALATED: <b>${t.name}</b> → Urgent`);
       }
     }
@@ -956,11 +1072,23 @@ cron.schedule('* * * * *', async () => {
         const msgTxt=stage.msg(t.name);
         const mention=t.assigneeId?`<@${t.assigneeId}> `:'';
         await saveTask(t);
-        await sendDiscord(t.assigneeId?`<@${t.assigneeId}>`:null,
-          [{title:`🔔 Nag #${t.nagCount}: ${t.name}`,description:mention+msgTxt,color:urg.color,fields:[...(t.due?[{name:'Due',value:fmtDate(t.due),inline:true}]:[]),...(t.assigneeId?[{name:'Assigned to',value:`<@${t.assigneeId}>`,inline:true}]:[]),...(t.snoozeReason?[{name:'Last snooze reason',value:t.snoozeReason,inline:true}]:[])],timestamp:new Date().toISOString()}],
-          taskActionRow(t.id,t.assigneeId)
-        );
-        if(t.assigneeId) await sendDM(t.assigneeId,null,[{title:`🔔 Reminder: ${t.name}`,description:msgTxt,color:urg.color,timestamp:new Date().toISOString()}]);
+        if(t.assigneeId){
+          // Nag goes to their personal channel
+          await sendToMember(t.assigneeId,
+            `<@${t.assigneeId}>`,
+            [{title:`🔔 Nag #${t.nagCount}: ${t.name}`,description:msgTxt,color:urg.color,fields:[...(t.due?[{name:'Due',value:fmtDate(t.due),inline:true}]:[]),...(t.snoozeReason?[{name:'Last snooze reason',value:t.snoozeReason,inline:true}]:[])],timestamp:new Date().toISOString()}],
+            taskActionRow(t.id,t.assigneeId)
+          );
+          // Only post to main channel every 3rd nag to avoid flooding
+          if(t.nagCount%3===0){
+            await sendDiscord(null,[{title:`🔔 Reminder #${t.nagCount}: ${t.name}`,description:`Still pending — assigned to **${t.assigneeName||'someone'}**`,color:urg.color,timestamp:new Date().toISOString()}]);
+          }
+        } else {
+          await sendDiscord(null,
+            [{title:`🔔 Nag #${t.nagCount}: ${t.name}`,description:msgTxt,color:urg.color,fields:t.due?[{name:'Due',value:fmtDate(t.due),inline:true}]:[],timestamp:new Date().toISOString()}],
+            taskActionRow(t.id,t.assigneeId)
+          );
+        }
         await sendTelegram(msgTxt.replace(/\*\*/g,'').replace(/\*/g,''));
       }
     }
@@ -995,5 +1123,6 @@ app.listen(PORT, async () => {
   console.log(`Taskmaster running on port ${PORT} 🔥`);
   await dbInit();
   await loadTasks();
+  await loadMemberChannels();
   await registerCommands();
 });
